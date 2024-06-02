@@ -5,6 +5,7 @@ const cors = require('cors')
 const cookieParser = require('cookie-parser')
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb')
 const jwt = require('jsonwebtoken')
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 const port = process.env.PORT || 8000
 
@@ -49,6 +50,7 @@ async function run() {
 
     const roomsCollection = client.db('stayvista').collection('rooms') 
     const usersCollection = client.db('stayvista').collection('users')
+    const bookingsCollection = client.db('stayvista').collection('booking')
 
 
     
@@ -107,6 +109,27 @@ async function run() {
           sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
         })
         .send({ success: true })
+    })
+
+    // /create-payment-intent
+    app.post('/create-payment-intent', async(req, res) => {
+      const price = req.body.price
+      const priceInCent = parseFloat(price) * 100
+      if(!price || priceInCent < 1) return
+
+      // generate payment secret
+      const { client_secret } = await stripe.paymentIntents.create({
+        amount: priceInCent,
+        currency: "usd",
+    // In the latest version of the API, specifying the `automatic_payment_methods` parameter is optional because Stripe enables its functionality by default.
+      automatic_payment_methods: {
+      enabled: true,
+    },
+      })
+      
+      // send client secret as response
+      res.send({clientSecret: client_secret})
+      
     })
 
 
@@ -228,6 +251,13 @@ async function run() {
       const result = await roomsCollection.findOne(query)
       res.send(result)
     })
+
+        // Save a booking data in DB => 01
+        app.post('/booking', async (req, res) => {
+          const bookingData = req.body
+          const result = await bookingsCollection.insertOne(bookingData)
+          res.send(result)
+        })
 
 
 
